@@ -92,6 +92,7 @@ class StableDiffusion(Ai_darw):
         self.process = 0
         self.work = False
         self.img = None
+        self.img_fix = False
 
         # 将输入发送给stable-diffusion webui并返回生成的图像
     def config(self, options):
@@ -113,8 +114,14 @@ class StableDiffusion(Ai_darw):
             self.work = True
             work_thread = threading.Thread(target=self.draw_async, args=(context,))
             work_thread.start()
-            reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + context.content + "，sd生成一般需要等待30s") 
+            if context.type == ContextType.TEXT:
+                reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + context.content + "，sd生成一般需要等待30s") 
+            elif context.type == ContextType.IMAGE and self.img_fix:
+                reply = Reply(ReplyType.INFO, "开始修复图像！需要等待30s左右。放大倍率为2倍，使用ESRGAN_4x算法")
+            else:
+                reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + self.pre_prompt + "，并且使用了ControlNet，生成一般需要等待30s")
         return reply
+
     def draw_async(self, context: Context):
         self.api.util_set_model(self.options["model"])
         params = self.params.copy()
@@ -130,16 +137,21 @@ class StableDiffusion(Ai_darw):
             params["prompt"] = self.pre_prompt
             with Image.open(context.content) as f:
                 img = f.copy()
+            if self.img_fix:
+                result = self.api.extra_single_images(images=img,
+                                 upscaler_1=webuiapi.Upscaler.ESRGAN_4x,
+                                 upscaling_resize=2.0)
+            else:
+                unit1 = webuiapi.ControlNetUnit(
+                    input_image=img,
+                    module=self.options["controlnet_mod"],
+                    model=self.options["controlnet_model"],
+                )
+                logger.info(
+                    "[SD] image_query={}".format(params["prompt"])
+                )
 
-            unit1 = webuiapi.ControlNetUnit(
-                input_image=img,
-                module=self.options["controlnet_mod"],
-                model=self.options["controlnet_model"],
-            )
-            logger.info(
-                "[SD] image_query={}".format(params["prompt"])
-            )
-            result = self.api.txt2img(**params, controlnet_units=[unit1])
+                result = self.api.txt2img(**params, controlnet_units=[unit1])
         self.img = io.BytesIO()
         result.image.save(self.img, format="PNG") 
 
@@ -316,4 +328,18 @@ class SD_MJ(Plugin):
 
     def sd_help(self, sessionid, bot):
         reply = Reply(ReplyType.INFO, self.get_help_text(verbose=True))
+        return reply
+    def sd_fix(self, sessionid, bot):
+        if sessionid not in self.prompt_session:
+            reply = Reply(ReplyType.INFO, "当前没有正在进行的画图！")
+        else:
+            reply = Reply(ReplyType.INFO, "开始修图模式！请发送图片。输入{self.trigger_prefix}sd fstop停止修图。")
+            self.sd_instance[sessionid].img_fix = True
+        return reply
+    def sd_fstop(self, sessionid, bot):
+        if sessionid not in self.prompt_session:
+            reply = Reply(ReplyType.INFO, "当前没有正在进行的画图！")
+        else:
+            reply = Reply(ReplyType.INFO, "停止修图模式！")
+            self.sd_instance[sessionid].img_fix = False
         return reply
