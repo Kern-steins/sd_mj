@@ -56,7 +56,7 @@ pip install webuiapi
       },
       	"options":{
       },
-      	"desc": "出图分辨率长宽变为1.6倍
+      	"desc": "出图分辨率长宽变为1.6倍"
     }
 }
 ```
