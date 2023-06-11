@@ -144,11 +144,11 @@ class StableDiffusion(Ai_darw):
         result.image.save(self.img, format="PNG") 
 
 
-# 定义一个名为SDWebUI的类，用于处理来自聊天机器人的事件
+# 定义一个名为SD_MJ的类，用于处理来自聊天机器人的事件
 @plugins.register(
-    name="sd", desc="利用stable-diffusion webui来画图", version="1.0", author="steins"
+    name="sd_mj", desc="利用StableDiffusion或者MidJourney来画图", version="1.0", author="steins"
 )
-class SDWebUI(Plugin):
+class SD_MJ(Plugin):
     def __init__(self):
         # 初始化实例变量
         super().__init__()
