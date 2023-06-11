@@ -1,7 +1,3 @@
----
-typora-root-url: res
----
-
 ## 插件描述
 
 本插件用于将画图请求转发给stable diffusion webui或者MidJourney，并且实现异步提交并且访问。**本插件基于wechatmp仅经过测试个人微信公众号**
@@ -25,7 +21,7 @@ typora-root-url: res
 
 使用前先安装stable diffusion webui，并在它的启动参数中添加 "--api"。或者使用[秋叶启动包](https://www.bilibili.com/video/BV1iM4y1y7oA/?spm_id_from=333.337.search-card.all.click&vd_source=02887443154cf0f76bbe965c3e32c0c8)，并且勾选`启用API`。可以选择`开放远程连接`，如果你的SD运行机器和公众号服务端不是一个电脑可以通过开放远程连接，并通过frp穿透实现调用sdapi。
 
-![sd](/sd.png)
+![sd](./res/sd.png)
 
 具体信息，请参考[文章](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/API)。
 
@@ -112,15 +108,15 @@ pip install webuiapi
 
 然后可以进行描述，经由Chatgpt转换成相应的对应prompt，并交给后台sd进行绘图，返回当前生成的prompt和提交任务提示。在输入任意文字可以获取当前进度。
 
-![示例图片](/示例图片.png)
+![示例图片](./res/示例图片.png)
 
 当需要进行查看个人配置时可以输入`&sd config `。
 
-![示例2](/示例2.png)
+![示例2](./res/示例2.png)
 
 当需要修改个人配置的时候输入`&sd 关键词`例如`&sd 二次元`可以将对应的`options`和`params`替换为你预设的模板
 
-![示例3](/示例3.png)
+![示例3](./res/示例3.png)
 
 个人默认参数`sd_default.json`如下:
 ```json
