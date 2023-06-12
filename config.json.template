@@ -34,14 +34,15 @@
 
       },
       "options":{
-        "model": "chilloutmix",
-        "lora": "<lora:add_detail:1>",
+        "model": "请修改为你想选择的默认模型",
+        "lora": "请选择你选择默认Lora，可以留空",
         "controlnet_mod": "lineart",
         "controlnet_model": "control_v11p_sd15_lineart [43d4be0d]"
       },
       "desc": "换回默认配置"
     }
   },
+  "base_url": "请选择你的mj-proxy所监听的端口/mj",
   "mj_keywords":{
     "IMAGINE": {"path": "submit/imagine", "method": "POST"},
     "DESCRIBE": {"path": "submit/describe", "method": "POST"},

@@ -20,15 +20,26 @@
 >
 > - [ ] MidJourney混图功能
 >
-> - [ ] MidJourney其他功能
+> - [ ] MidJourney U1-4, V1-4选择图片功能
 >
 > - [ ] 相关提示，说明文档的优化入
 
 ## 环境要求
 
-使用前先安装stable diffusion webui，并在它的启动参数中添加 "--api"。具体信息，请参考[文章](https://github.com/AUTOMATIC1111/stable-diffusion-webui/wiki/API)。
+#### Stable_Diffusion前置，官方方式安装stable diffusion webui：
 
-或者使用[秋叶启动包](https://www.bilibili.com/video/BV1iM4y1y7oA/?spm_id_from=333.337.search-card.all.click&vd_source=02887443154cf0f76bbe965c3e32c0c8)，并且勾选`启用API`。可以选择`开放远程连接`，如果你的SD运行机器和公众号服务端不是一个电脑可以通过开放远程连接，并通过frp穿透实现调用sdapi。
+>安装stable diffusion webui，并在它的启动参数中添加 "--api"。[参考文章](https://github.com/AUTOMATIC1111/stable-diffusion-webui/blob/master/README.md#installation-and-running)
+>
+>##### windows:
+>
+>- 安装Python 3.10.6, 并勾选Add Python to PATH
+>- 安装 [git](https://git-scm.com/download/win)
+>- `git clone https://github.com/AUTOMATIC1111/stable-diffusion-webui.git`
+>- 运行`webui-user.bat` 
+
+### 使用整合包（推荐）
+
+>使用[秋叶启动包](https://www.bilibili.com/video/BV1iM4y1y7oA/?spm_id_from=333.337.search-card.all.click&vd_source=02887443154cf0f76bbe965c3e32c0c8)，并且勾选`启用API`。可以选择`开放远程连接`，如果你的SD运行机器和公众号服务端不是一个电脑可以通过开放远程连接，并通过frp穿透实现调用sdapi。
 
 ![sd](./res/sd.png)
 
@@ -40,7 +51,44 @@
 pip install webuiapi
 ```
 
+### 部署[midjourney-proxy](https://github.com/novicezk/midjourney-proxy)
+
+>请跟随midjourney-proxy的说明文档来部署midjourney-proxy
+
 ## 使用说明
+
+### 请修改以下两个文档的关键信息：
+
+>`config.json.template` 中的所有"model"和"lora"选项，因为我预装的SD Model可能有所出00入。以及`base_url` ，这个是你所部署的mj-proxy所监听的地址，例如我部署在本地mj-proxy，并且监听8000端口，因此我的`"base_url" : "http://127.0.0.1:8000/mj"`
+>
+>```json
+>"options":{
+>    "model": "请修改为你想选择的默认模型", <- 需要修改
+>    "lora": "请选择你选择默认Lora，可以留空", <- 需要修改
+>    "controlnet_mod": "lineart", <- 可以修改
+>    "controlnet_model": "control_v11p_sd15_lineart [43d4be0d]" <- 可以修改
+>  },
+>  "base_url": "请选择你的mj-proxy所监听的端口/mj", <- 需要修改
+>```
+>
+>还有`user_config/sd_default.json` 
+>
+>```json
+> "start":{
+>        "host" : "127.0.0.1", <- 请修改为符合你设置的SD API地址
+>        "port" : 7860, <- 符合你设置的监听端口
+>        "use_https" : false
+>  },
+>"options": {
+>        "model": "chilloutmix", <- 请修改
+>        "lora": "<lora:add_detail:1>", <- 请修改
+>        "controlnet_mod": "lineart",
+>        "controlnet_model": "control_v11p_sd15_lineart [43d4be0d]"
+>    } 
+>```
+>如果部署sdwebui的是在本机电脑上，请修改`port`到对应的端口。如果sdwebui和公众号不在一台机器上，请使用frp穿透，详情浏览：[frp](https://github.com/fatedier/frp)。将sdwebui的端口转发到公众号服务器上，并修改相应的端口。~~这个`start`其实不用放在这个个人配置json里的，但是懒得改了，就这样吧~~
+
+
 
 我使用了两个json，一个json是`config.json`是用作`sd_mj.py`的各项命令配置，另一个json是`user_config/sd_default.json`，这个是用来加载每个用户独立配置的，有一个默认json模板`sd_default.json`，当每个用户第一次调用这个插件时会在`user_config`文件夹下生成一个`config_{session_id}`的个人配置文件。
 
@@ -48,7 +96,7 @@ pip install webuiapi
 
 ```json
 {
-    "commands": ["help","start","stop","config"]
+    "commands": ["help", "start", "stop", "config", "fix", "fstop"],
 }
 ```
 
@@ -77,20 +125,6 @@ pip install webuiapi
 ```
 
 哪位大手子有更好的prompt可以自行修改，并且互相探讨。
-
-修改`sd_default.json`。最重要的是先修改"start"
-
-```json
-{
-    "start":{
-        "host":"127.0.0.1",
-        "port":"7860",
-        "use_https":false
-    }
-}
-```
-
-如果部署sdwebui的是在本机电脑上，请修改`port`到对应的端口。如果sdwebui和公众号不在一台机器上，请使用frp穿透，详情浏览：[frp](https://github.com/fatedier/frp)。将sdwebui的端口转发到公众号服务器上，并修改相应的端口。~~这个`start`其实不用放在这个个人配置json里的，但是懒得改了，就这样吧~~
 
 ```json
 {
@@ -156,7 +190,18 @@ pip install webuiapi
 }
 ```
 
+### MidJourney支持：
 
+输入`&mj start`，启动MJ绘图模式：先输入文字描述，画完之后在传入图片才能实现图生图，主要还是个人公众号的条件太差没做更多的接口，否则可以实现公众号一键开始。
+
+![MJ示例](./res/MJ示例.png)
+
+
+
+## 版本：
+
+- version 1.1:加入了Midjourney支持和Stable_Diffusion的图片修复功能
+- version 1.0:基础版本，支持了Stable_Diffusion的txt2img和基于ControlNet的读图系统
 
 ## 鸣谢
 
