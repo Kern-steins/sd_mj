@@ -210,7 +210,7 @@ class StableDiffusion(Ai_darw):
 
 # 定义一个名为SD_MJ的类，用于处理来自聊天机器人的事件
 @plugins.register(
-    name="sd", namecn= "mj", desc="利用StableDiffusion或者MidJourney来画图", version="1.0", author="steins"
+    name="sd", namecn= "mj", desc="利用StableDiffusion或者MidJourney来画图", version="1.1", author="steins"
 )
 class SD_MJ(Plugin):
     def __init__(self):
