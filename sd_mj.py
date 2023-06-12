@@ -69,61 +69,46 @@ class MidJourney(Ai_darw):
     def draw(self, context: Context):
         if self.work:
             respone = self.method_respone("FETCH")
-            if respone['status'] == 'FAILURE':
-                reply = Reply(ReplyType.ERROR, "生成失败，请重试。失败原因：" + respone['failReason'])
-            elif respone['status'] == 'SUCCESS':
-                res_img = requests.get(respone['iamgeUrl']).content
+            if respone.json()['status'] == 'FAILURE':
+                reply = Reply(ReplyType.ERROR, "生成失败，请重试。失败原因：" + respone.json()['failReason'])
+            elif respone.json()['status'] == 'SUCCESS':
+                res_img = requests.get(respone.json()['imageUrl']).content
                 self.img = io.BytesIO(res_img)
                 reply = Reply(ReplyType.IMAGE, self.img)
-            elif respone['status'] == 'IN_PROGRESS':
-                reply = Reply(ReplyType.INFO, f"图像正在生成目前进度为{respone['progress'] * 100:.1f}%，请稍等一下")
+            elif respone.json()['status'] == 'IN_PROGRESS':
+                reply = Reply(ReplyType.INFO, f"图像正在生成目前进度为{respone.json()['progress']}，请稍等一下")
+                return reply
             else:
                 reply = Reply(ReplyType.ERROR, "未知错误")
-            self.work = False
             return reply
         else:
             self.work = True
 
             if context.type == ContextType.TEXT: 
+                logger.info("[MJ] recive text: " + context.content)
                 self.pre_prompt = context.content
-                data_body = {**self.module.get("DRAW")["body"], **{"prompt": self.pre_prompt}}
+                data_body = {**self.module.get("IMAGINE")["body"], **{"prompt": self.pre_prompt}}
                 respone = self.method_respone("IMAGINE", **data_body)
                 if respone.status_code == 200:
-                    self.id = respone.json()['id']
+                    self.id = respone.json()['result']
                     reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + self.pre_prompt + "，本次ID："+ self.id + ",生成一般需要等待30s，请等待一段时间后回复任意消息获得结果")
                 else:
                     reply = Reply(ReplyType.ERROR, "生成失败，请重试。失败原因：" + respone.json()['failReason'])
             elif context.type == ContextType.IMAGE:
                 with open(context.content, "rb") as f:
                     img = base64.b64encode(f.read()).decode()
-                data_body = {**self.module.get("DRAW")["body"], **{"prompt": self.pre_prompt, "base64": img}}
-                respone = method_respone("IMAGINE", **data_body)
+                data_body = {**self.module.get("IMAGINE")["body"], **{"prompt": self.pre_prompt, "base64": img}}
+                respone = self.method_respone("IMAGINE", **data_body)
                 if respone.status_code == 200:
-                    self.id = respone.json()['id']
+                    self.id = respone.json()['result']
                     reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + self.pre_prompt + "，本次ID："+ self.id + ",生成一般需要等待30s，请等待一段时间后回复任意消息获得结果")
                 else:
                     reply = Reply(ReplyType.ERROR, "生成失败，请重试。失败原因：" + respone.json()['failReason'])
             return reply
-                
-            
-                
-        # else:
-        #     self.work = True
-        #     work_thread = threading.Thread(target=self.draw_async, args=(context,))
-        #     work_thread.start()
-        #     if context.type == ContextType.TEXT:
-        #         reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + context.content + "，sd生成一般需要等待30s, 请待一段时间后回复任意消息以获得结果") 
-        #     elif context.type == ContextType.IMAGE and self.img_fix:
-        #         reply = Reply(ReplyType.INFO, "开始修复图像！需要等待30s左右。放大倍率为2倍，使用ESRGAN_4x算法，请等待一段时间后回复任意消息获得结果")
-        #     else:
-        #         reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + self.pre_prompt + "，并且使用了ControlNet，生成一般需要等待30s，请等待一段时间后回复任意消息获得结果")
-        # return reply
-        # pass
-    
 
     def method_respone(self, op_name, **kwargs):
         if op_name == "FETCH":
-            return requests.request("GET", self.module.get(op_name)["path"] + self.id + "/fetch")
+            return requests.request("GET", self.base_url + self.module.get(op_name)["path"] + self.id + "/fetch")
         elif op_name in self.module:
             new_kwargs = {**self.module.get(op_name)["body"], **kwargs}
             return requests.request("POST", self.base_url + self.module.get(op_name)["path"], json=new_kwargs)
@@ -256,10 +241,10 @@ class SD_MJ(Plugin):
         logger.info("[SD] inited")
         if conf().get("expires_in_seconds"):
             self.prompt_session = ExpiredDict(conf().get("expires_in_seconds"))
-            self.sd_instance = ExpiredDict(conf().get("expires_in_seconds"))
+            self.instance = ExpiredDict(conf().get("expires_in_seconds"))
         else:
             self.prompt_session = dict()
-            self.sd_instance = dict()
+            self.instance = dict()
     # 事件处理程序，用于处理来自聊天机器人的上下文
     def on_handle_context(self, e_context: EventContext):
         # 获取事件上下文中的内容和会话ID
@@ -304,7 +289,7 @@ class SD_MJ(Plugin):
                     command_handler = getattr(self, f"mj_{clist[1]}")
                     reply = command_handler(sessionid, bot)
                 else:
-                    reply = self.mj_help(sessionid)
+                    reply = self.mj_help(sessionid, bot)
                     e_context["reply"] = reply
                     e_context.action = EventAction.BREAK_PASS
 
@@ -319,7 +304,7 @@ class SD_MJ(Plugin):
             )
             # 如果当前有正在进行的画图，则将用户输入的内容传递给相应的实例进行处理，并将结果传递给StableDiffusion_draw实例进行图像生成
             self.prompt_session[sessionid].action(context)
-            reply = self.sd_instance[sessionid].draw(context)
+            reply = self.instance[sessionid].draw(context)
             # 将生成的图像作为回复发送给聊天机器人
             e_context["reply"] = reply
             e_context.action = EventAction.BREAK_PASS
@@ -347,16 +332,16 @@ class SD_MJ(Plugin):
             reply = Reply(ReplyType.INFO, "检测到已经进入画图模式，已重置")
         
         self.prompt_session[sessionid] = StableDiffusion_prompt(bot, sessionid, self.gpt_set_prompt)
-        self.sd_instance[sessionid] = StableDiffusion(sessionid)
+        self.instance[sessionid] = StableDiffusion(sessionid)
         return reply
     def sd_stop(self, sessionid, bot): 
         if sessionid in self.prompt_session:                                                                          
             # 如果当前有正在进行的画图，则删除相应的实例并发送回复
             self.prompt_session[sessionid].reset()
-            with open(self.sd_instance[sessionid].user_config_path, "w") as f:
-                json.dump(self.sd_instance[sessionid].usr_config, f, indent=4, ensure_ascii=False)
+            with open(self.instance[sessionid].user_config_path, "w") as f:
+                json.dump(self.instance[sessionid].usr_config, f, indent=4, ensure_ascii=False)
             del self.prompt_session[sessionid]
-            del self.sd_instance[sessionid]
+            del self.instance[sessionid]
             reply = Reply(ReplyType.INFO, "停止画图！")
         else:
             # 如果当前没有正在进行的画图，则发送回复
@@ -364,33 +349,33 @@ class SD_MJ(Plugin):
         return reply
     def sd_config(self, sessionid, bot):
         non_instance = False
-        if not self.sd_instance.get(sessionid):
-            self.sd_instance[sessionid] = StableDiffusion(sessionid)
+        if not self.instance.get(sessionid):
+            self.instance[sessionid] = StableDiffusion(sessionid)
             non_instance = True
-        usr_params = self.sd_instance[sessionid].params
-        usr_options= self.sd_instance[sessionid].options
+        usr_params = self.instance[sessionid].params
+        usr_options= self.instance[sessionid].options
         reply = Reply(ReplyType.INFO, f"当前配置为：{usr_params},{usr_options}")
         if non_instance:
-            del self.sd_instance[sessionid]
+            del self.instance[sessionid]
         return reply
     def sd_setconfig(self, sessionid, command): 
         non_instance = False
-        if not self.sd_instance.get(sessionid):
-            self.sd_instance[sessionid] = StableDiffusion(sessionid)
+        if not self.instance.get(sessionid):
+            self.instance[sessionid] = StableDiffusion(sessionid)
             non_instance = True
         add_prams = self.config["sd_keywords"][command]["params"]
         add_options = self.config["sd_keywords"][command]["options"]
-        new_params = {**self.sd_instance[sessionid].params, **add_prams}
-        new_options= {**self.sd_instance[sessionid].options, **add_options}
-        self.sd_instance[sessionid].usr_config["params"] = new_params
-        self.sd_instance[sessionid].params = new_params
-        self.sd_instance[sessionid].usr_config["options"] = new_options
-        self.sd_instance[sessionid].options = new_options
-        with open(self.sd_instance[sessionid].user_config_path, "w") as f:
-            json.dump(self.sd_instance[sessionid].usr_config, f, indent=4, ensure_ascii=False)
+        new_params = {**self.instance[sessionid].params, **add_prams}
+        new_options= {**self.instance[sessionid].options, **add_options}
+        self.instance[sessionid].usr_config["params"] = new_params
+        self.instance[sessionid].params = new_params
+        self.instance[sessionid].usr_config["options"] = new_options
+        self.instance[sessionid].options = new_options
+        with open(self.instance[sessionid].user_config_path, "w") as f:
+            json.dump(self.instance[sessionid].usr_config, f, indent=4, ensure_ascii=False)
         reply = Reply(ReplyType.INFO, f"已设置参数{add_options},{add_prams}！")
         if non_instance:
-            del self.sd_instance[sessionid]
+            del self.instance[sessionid]
         return reply
 
     def sd_help(self, sessionid, bot):
@@ -401,12 +386,39 @@ class SD_MJ(Plugin):
             reply = Reply(ReplyType.INFO, "当前没有正在进行的画图！")
         else:
             reply = Reply(ReplyType.INFO, "开始修图模式！请发送图片。输入{self.trigger_prefix}sd fstop停止修图。")
-            self.sd_instance[sessionid].img_fix = True
+            self.instance[sessionid].img_fix = True
         return reply
     def sd_fstop(self, sessionid, bot):
         if sessionid not in self.prompt_session:
             reply = Reply(ReplyType.INFO, "当前没有正在进行的画图！")
         else:
             reply = Reply(ReplyType.INFO, "停止修图模式！")
-            self.sd_instance[sessionid].img_fix = False
+            self.instance[sessionid].img_fix = False
+        return reply
+    
+    def mj_start(self, sessionid, bot):
+        if sessionid not in self.prompt_session:
+            reply = Reply(
+            ReplyType.INFO,
+            f"开始画图！请发送图片或文字。该程序是先输入文字描述然后在输入图片进行精修若直接输入图片则使用默认描述。输入{self.trigger_prefix}sd stop停止画图。")   
+        else:
+            reply = Reply(ReplyType.INFO, "检测到已经进入画图模式，已重置")
+        
+        self.prompt_session[sessionid] = StableDiffusion_prompt(bot, sessionid, self.gpt_set_prompt)
+        self.instance[sessionid] = MidJourney(base_url= self.config["base_url"],module=self.config["mj_keywords"])
+        return reply
+    def mj_stop(self, sessionid, bot): 
+        if sessionid in self.prompt_session:                                                                          
+            # 如果当前有正在进行的画图，则删除相应的实例并发送回复
+            self.prompt_session[sessionid].reset()
+            del self.prompt_session[sessionid]
+            del self.instance[sessionid]
+            reply = Reply(ReplyType.INFO, "停止画图！")
+        else:
+            # 如果当前没有正在进行的画图，则发送回复
+            reply = Reply(ReplyType.INFO, "当前没有正在进行的画图！")
+        return reply
+   
+    def mj_help(self, sessionid, bot):
+        reply = Reply(ReplyType.INFO, self.get_help_text(verbose=True))
         return reply
