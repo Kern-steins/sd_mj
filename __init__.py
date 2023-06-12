@@ -1,1 +1,1 @@
-from .sdwebui import *
+from .sd_mj import *
