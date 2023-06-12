@@ -6,6 +6,8 @@ import json
 import os
 import time
 import threading
+import requests
+import base64
 
 import webuiapi
 from bridge.bridge import Bridge
@@ -55,10 +57,76 @@ class Ai_darw:
         pass
 
 class MidJourney(Ai_darw):
-    def __init__(self):
-        pass
+    def __init__(self, base_url, module):
+        self.base_url = base_url
+        self.pre_prompt = ""
+        self.work = False
+        self.process = 0
+        self.img = None
+        self.id = None
+        self.module = module
+        
     def draw(self, context: Context):
-        pass
+        if self.work:
+            respone = self.method_respone("FETCH")
+            if respone['status'] == 'FAILURE':
+                reply = Reply(ReplyType.ERROR, "生成失败，请重试。失败原因：" + respone['failReason'])
+            elif respone['status'] == 'SUCCESS':
+                res_img = requests.get(respone['iamgeUrl']).content
+                self.img = io.BytesIO(res_img)
+                reply = Reply(ReplyType.IMAGE, self.img)
+            elif respone['status'] == 'IN_PROGRESS':
+                reply = Reply(ReplyType.INFO, f"图像正在生成目前进度为{respone['progress'] * 100:.1f}%，请稍等一下")
+            else:
+                reply = Reply(ReplyType.ERROR, "未知错误")
+            self.work = False
+            return reply
+        else:
+            self.work = True
+
+            if context.type == ContextType.TEXT: 
+                self.pre_prompt = context.content
+                data_body = {**self.module.get("DRAW")["body"], **{"prompt": self.pre_prompt}}
+                respone = self.method_respone("IMAGINE", **data_body)
+                if respone.status_code == 200:
+                    self.id = respone.json()['id']
+                    reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + self.pre_prompt + "，本次ID："+ self.id + ",生成一般需要等待30s，请等待一段时间后回复任意消息获得结果")
+                else:
+                    reply = Reply(ReplyType.ERROR, "生成失败，请重试。失败原因：" + respone.json()['failReason'])
+            elif context.type == ContextType.IMAGE:
+                with open(context.content, "rb") as f:
+                    img = base64.b64encode(f.read()).decode()
+                data_body = {**self.module.get("DRAW")["body"], **{"prompt": self.pre_prompt, "base64": img}}
+                respone = method_respone("IMAGINE", **data_body)
+                if respone.status_code == 200:
+                    self.id = respone.json()['id']
+                    reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + self.pre_prompt + "，本次ID："+ self.id + ",生成一般需要等待30s，请等待一段时间后回复任意消息获得结果")
+                else:
+                    reply = Reply(ReplyType.ERROR, "生成失败，请重试。失败原因：" + respone.json()['failReason'])
+            return reply
+                
+            
+                
+        # else:
+        #     self.work = True
+        #     work_thread = threading.Thread(target=self.draw_async, args=(context,))
+        #     work_thread.start()
+        #     if context.type == ContextType.TEXT:
+        #         reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + context.content + "，sd生成一般需要等待30s, 请待一段时间后回复任意消息以获得结果") 
+        #     elif context.type == ContextType.IMAGE and self.img_fix:
+        #         reply = Reply(ReplyType.INFO, "开始修复图像！需要等待30s左右。放大倍率为2倍，使用ESRGAN_4x算法，请等待一段时间后回复任意消息获得结果")
+        #     else:
+        #         reply = Reply(ReplyType.INFO, "开始生成图像！本次prompt:" + self.pre_prompt + "，并且使用了ControlNet，生成一般需要等待30s，请等待一段时间后回复任意消息获得结果")
+        # return reply
+        # pass
+    
+
+    def method_respone(self, op_name, **kwargs):
+        if op_name == "FETCH":
+            return requests.request("GET", self.module.get(op_name)["path"] + self.id + "/fetch")
+        elif op_name in self.module:
+            new_kwargs = {**self.module.get(op_name)["body"], **kwargs}
+            return requests.request("POST", self.base_url + self.module.get(op_name)["path"], json=new_kwargs)
 
 class StableDiffusion(Ai_darw):
     def __init__(self, user_id):
@@ -107,7 +175,7 @@ class StableDiffusion(Ai_darw):
             if self.img:
                 reply = Reply(ReplyType.IMAGE, self.img)
             else:
-                reply = Reply(ReplyType.INFO, "完了找不到图片了，请重试")
+                reply = Reply(ReplyType.ERROR, "完了找不到图片了，请重试")
             self.work = False
         else:
             self.work = True
@@ -219,7 +287,7 @@ class SD_MJ(Plugin):
                 elif clist[1] in self.commands:
                     command_handler = getattr(self, f"sd_{clist[1]}")
                     reply = command_handler(sessionid, bot)
-                elif clist[1] in self.config.get("keywords", []):
+                elif clist[1] in self.config.get("sd_keywords", []):
                     reply = self.sd_setconfig(sessionid, clist[1])
                 else:
                     reply = self.sd_help(sessionid, bot)
@@ -265,7 +333,7 @@ class SD_MJ(Plugin):
         help_text += f'使用方法:\n使用"{trigger}sd start"进入画图模式。\n \
 然后跟他对话或者发送图片即可让他画图"\n然后使用"{trigger}sd 关键词"可以更改模型和其他参数\n'
         help_text += "目前可用关键词：\n"
-        rule = self.config["keywords"]
+        rule = self.config["sd_keywords"]
         for keyword, details in rule.items():
             desc = details.get("desc", "")
             help_text += f"{keyword}：{desc}\n"
@@ -310,8 +378,8 @@ class SD_MJ(Plugin):
         if not self.sd_instance.get(sessionid):
             self.sd_instance[sessionid] = StableDiffusion(sessionid)
             non_instance = True
-        add_prams = self.config["keywords"][command]["params"]
-        add_options = self.config["keywords"][command]["options"]
+        add_prams = self.config["sd_keywords"][command]["params"]
+        add_options = self.config["sd_keywords"][command]["options"]
         new_params = {**self.sd_instance[sessionid].params, **add_prams}
         new_options= {**self.sd_instance[sessionid].options, **add_options}
         self.sd_instance[sessionid].usr_config["params"] = new_params
