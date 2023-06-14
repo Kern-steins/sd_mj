@@ -97,7 +97,7 @@ class MidJourney(Ai_darw):
             elif context.type == ContextType.IMAGE:
                 with open(context.content, "rb") as f:
                     img = base64.b64encode(f.read()).decode()
-                data_body = {**self.module.get("IMAGINE")["body"], **{"prompt": self.pre_prompt, "base64": img}}
+                data_body = {**self.module.get("IMAGINE")["body"], **{"prompt": self.pre_prompt, "base64":"data:image/png;base64," + img}}
                 respone = self.method_respone("IMAGINE", **data_body)
                 if respone.status_code == 200:
                     self.id = respone.json()['result']
@@ -284,7 +284,7 @@ class SD_MJ(Plugin):
                 return
             elif clist[0] == f"{trigger_prefix}mj":
                 if len(clist) == 1:
-                    reply = self.mj_help(sessionid)
+                    reply = self.mj_help(sessionid, bot)
                 elif clist[1] in self.commands:
                     command_handler = getattr(self, f"mj_{clist[1]}")
                     reply = command_handler(sessionid, bot)
@@ -315,7 +315,7 @@ class SD_MJ(Plugin):
         if not verbose:
             return help_text
         trigger = conf().get("plugin_trigger_prefix", "$") 
-        help_text += f'使用方法:\n使用"{trigger}sd start"进入画图模式。\n \
+        help_text += f'使用方法:\n使用"{trigger}sd start"进入sd画图模式，或者{trigger}mj start进入mj画图模式。\n \
 然后跟他对话或者发送图片即可让他画图"\n然后使用"{trigger}sd 关键词"可以更改模型和其他参数\n'
         help_text += "目前可用关键词：\n"
         rule = self.config["sd_keywords"]
@@ -400,7 +400,7 @@ class SD_MJ(Plugin):
         if sessionid not in self.prompt_session:
             reply = Reply(
             ReplyType.INFO,
-            f"开始画图！请发送图片或文字。该程序是先输入文字描述然后在输入图片进行精修若直接输入图片则使用默认描述。输入{self.trigger_prefix}sd stop停止画图。")   
+            f"开始画图！请发送图片或文字。该程序是先输入文字描述然后在输入图片进行精修若直接输入图片则使用默认描述。输入{self.trigger_prefix}mj stop停止画图。")   
         else:
             reply = Reply(ReplyType.INFO, "检测到已经进入画图模式，已重置")
         
