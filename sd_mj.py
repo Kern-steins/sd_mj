@@ -40,14 +40,14 @@ class StableDiffusion_prompt:
         # 处理用户输入的内容并生成stable-diffusion需要的输入
 
     def action(self, context: Context) -> Context:
-        if context.type == ContextType.IMAGE:
+        if context.type == ContextType.IMAGE: #如果传入的是图像，则使用上一次生成的prompt
             return
         if self.first_interact:
-            pre_gpt_prompt = self.gpt_set_prompt + context.content
+            pre_gpt_prompt = self.gpt_set_prompt + context.content # 如果是第一次进入画图模式则将预先设置chatgpt设定为预设的角色
             self.first_interact = False
         else:
             pre_gpt_prompt = context.content
-        gpt_reply = self.bot.reply(pre_gpt_prompt, context)
+        gpt_reply = self.bot.reply(pre_gpt_prompt, context) # 将输入的内容传入chatgpt，让他生成prompt
         context.content = gpt_reply.content
 
 class Ai_darw:
@@ -178,22 +178,22 @@ class StableDiffusion(Ai_darw):
         self.api.util_set_model(self.options["model"])
         params = self.params.copy()
         params["prompt"] = self.options["lora"] + ", " + self.params["prompt"]
-        if context.type == ContextType.TEXT:
+        if context.type == ContextType.TEXT: #如果这次传入的是文字，则用Chatgpt生成的prompt
             params["prompt"] += context["content"]
             logger.info(
                 "[SD] image_query={}".format(params["prompt"])
             )
             result = self.api.txt2img(**params)
             self.pre_prompt = params["prompt"]
-        elif context.type == ContextType.IMAGE:
+        elif context.type == ContextType.IMAGE: #如果这次传入的是图像，则用上次生成的prompt
             params["prompt"] = self.pre_prompt
-            with Image.open(context.content) as f:
+            with Image.open(context.content) as f: #将从微信保存的图片打开,content为图片路径/tmp/pictureid.png
                 img = f.copy()
-            if self.img_fix:
+            if self.img_fix: #如果是修复模式就不需要进行调用txt2img来生成图片
                 result = self.api.extra_single_image(image=img,
                                  upscaler_1=webuiapi.Upscaler.ESRGAN_4x,
                                  upscaling_resize=2.0)
-            else:
+            else: #因为传入的是图片，使用ControlNet来进行图生图
                 unit1 = webuiapi.ControlNetUnit(
                     input_image=img,
                     module=self.options["controlnet_mod"],
@@ -203,8 +203,8 @@ class StableDiffusion(Ai_darw):
                     "[SD] image_query={}".format(params["prompt"])
                 )
 
-                result = self.api.txt2img(**params, controlnet_units=[unit1])
-        self.img = io.BytesIO()
+                result = self.api.txt2img(**params, controlnet_units=[unit1]) #相关api可以在webuiapi的github仓库中查看
+        self.img = io.BytesIO() #将传回的结果存在内存中，不作为文件保存在电脑上，节省io操作，并且免得清理文件
         result.image.save(self.img, format="PNG") 
 
 
